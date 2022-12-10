@@ -5,7 +5,6 @@ import Control.Monad (when)
 import Data.Foldable (foldl')
 import Data.Functor (($>))
 import qualified Data.List as List
-import qualified Data.Matrix as Matrix
 import Data.Set (Set)
 import qualified Data.Set as Set
 import System.Environment (getArgs)
@@ -19,24 +18,33 @@ part1 :: IO ()
 part1 = do
   input <- parseFromFile parser "input.txt" >>= either (error . show) return
   -- print input
-  let state = State {head = (1, 1), tail = (1, 1), tailHistory = Set.singleton (1, 1)}
+  let state = createState 1
   let finalState = foldl' step state input
-  -- print $ Matrix.matrix 6 6 (`Set.member` tailHistory finalState)
   print $ length $ tailHistory finalState
-  -- print (tail . foldl' step state <$> List.inits input)
   return ()
 
 step :: State -> Direction -> State
 step state@State {head, tail, tailHistory} dir = state {head = head', tail = tail', tailHistory = tailHistory'}
   where
     head' = moveHead dir head
-    tail' = moveTail head' tail
-    tailHistory' = Set.insert tail tailHistory
+    tail' = List.unfoldr f (head', tail)
+    tailHistory' = Set.insert (List.last tail') tailHistory
+
+f :: (Coord, [Coord]) -> Maybe (Coord, (Coord, [Coord]))
+f (head, []) = Nothing
+f (head, tail : rest) = Just (tail', (tail', rest))
+  where
+    tail' = moveTail head tail
+
+index :: Int -> [a] -> Maybe a
+index i xs = if length xs > i then Just (xs !! i) else Nothing
 
 part2 :: IO ()
 part2 = do
   input <- parseFromFile parser "input.txt" >>= either (error . show) return
-  -- print $
+  let state = createState 9
+  let finalState = foldl' step state input
+  print $ length $ tailHistory finalState
   return ()
 
 moveHead :: Direction -> Coord -> Coord
@@ -52,19 +60,21 @@ moveTail head@(x, y) tail@(x', y')
   | y == y' = (x' + signum (x - x'), y')
   | otherwise = (x' + signum (x - x'), y' + signum (y - y'))
 
--- manhattan :: Coord -> Coord -> Int
--- manhattan (x1, y1, z1) (x2, y2, z2) = abs (x1 - x2) + abs (y1 - y2) + abs (z1 - z2)
-
 data Direction = Up | Right | Down | Left deriving (Show, Eq)
 
 type Coord = (Int, Int)
 
 data State = State
   { head :: Coord,
-    tail :: Coord,
+    tail :: [Coord],
     tailHistory :: Set Coord
   }
   deriving (Show)
+
+createState :: Int -> State
+createState size = State {head, tail = replicate size head, tailHistory = Set.singleton head}
+  where
+    head = (1, 1)
 
 parser :: Parser [Direction]
 parser = concat <$> movement `sepEndBy` newline <* eof
