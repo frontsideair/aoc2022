@@ -1,50 +1,53 @@
 import Control.Monad (when)
-import Data.Matrix (Matrix)
+import Data.Matrix (Matrix, (!))
 import qualified Data.Matrix as Matrix
-import Data.Maybe (fromMaybe)
 import System.Environment (getArgs)
 import Text.Parsec (count, digit, eof, many1)
 import Text.Parsec.Char (newline)
 import Text.Parsec.Combinator (sepEndBy)
 import Text.Parsec.String (Parser, parseFromFile)
+import Prelude hiding (Left, Right)
 
 part1 :: IO ()
 part1 = do
   input <- parseFromFile parser "input.txt" >>= either (error . show) return
   -- print input
-  let topLeft = Matrix.mapPos (\pos a -> get pos input topLeft) input
-  -- print topLeft
-  let reversed = reverseMatrix input
-  let br = Matrix.mapPos (\pos a -> get pos reversed br) reversed
-  let bottomRight = reverseMatrix br
-  -- print bottomRight
-  let visible = Matrix.mapPos (\(x, y) a -> let tl = Matrix.getElem x y topLeft; br = Matrix.getElem x y bottomRight in any (\b -> fst b < a) [vertical tl, horizontal tl, vertical br, horizontal br]) input
-  -- print visible
+  let visible = Matrix.mapPos (\pos a -> any (< a) [get input (dir, pos) | dir <- [Up .. Left]]) input
   print $ length $ filter (== True) (Matrix.toList visible)
   return ()
 
-reverseMatrix :: Matrix a -> Matrix a
-reverseMatrix matrix = Matrix.fromList (Matrix.nrows matrix) (Matrix.ncols matrix) . reverse . Matrix.toList $ matrix
+data Height = Height {_top :: Int, _right :: Int, _bottom :: Int, _left :: Int} deriving (Show)
 
-type Height' = (Int, Int)
+data Dir = Up | Right | Down | Left deriving (Show, Eq, Ord, Enum, Bounded)
 
-data Height = Height {vertical :: Height', horizontal :: Height'} deriving (Show)
-
-get :: (Int, Int) -> Matrix Int -> Matrix Height -> Height
-get (x, y) m1 matrix = Height vertical' horizontal'
+get :: Matrix Int -> (Dir, (Int, Int)) -> Int
+get matrix (dir, (x, y)) = case Matrix.safeGet x' y' matrix of
+  Nothing -> -1
+  Just current -> max (get matrix (dir, (x', y'))) current
   where
-    pv = (x - 1, y)
-    ph = (x, y - 1)
-    vertical' = maybe (-1, 0) (max' (fromMaybe (-1) $ uncurry Matrix.safeGet pv m1) . vertical) (Matrix.safeGet (x - 1) y matrix)
-    horizontal' = maybe (-1, 0) (max' (fromMaybe (-1) $ uncurry Matrix.safeGet ph m1) . horizontal) (Matrix.safeGet x (y - 1) matrix)
-    max' c (a, b) = if a > c then (a, b + 1) else (c, 1)
+    (x', y') = move dir (x, y)
+
+move :: Dir -> (Int, Int) -> (Int, Int)
+move dir (x, y) = case dir of
+  Up -> (x - 1, y)
+  Right -> (x, y + 1)
+  Down -> (x + 1, y)
+  Left -> (x, y - 1)
 
 part2 :: IO ()
 part2 = do
+  input <- parseFromFile parser "input.txt" >>= either (error . show) return
+  -- print input
+  let scenicScores = Matrix.mapPos (\pos a -> product [get' input (a, dir, pos) | dir <- [Up .. Left]]) input
+  print $ maximum (Matrix.toList scenicScores)
   return ()
 
-scenicValue :: Height -> Height -> Int
-scenicValue a b = snd (vertical a) * snd (horizontal a) * snd (vertical b) * snd (horizontal b)
+get' :: Matrix Int -> (Int, Dir, (Int, Int)) -> Int
+get' matrix (n, dir, (x, y)) = case Matrix.safeGet x' y' matrix of
+  Nothing -> 0
+  Just current -> if n > current then 1 + get' matrix (n, dir, (x', y')) else 1
+  where
+    (x', y') = move dir (x, y)
 
 parser :: Parser (Matrix Int)
 parser = Matrix.fromLists <$> line `sepEndBy` newline <* eof
