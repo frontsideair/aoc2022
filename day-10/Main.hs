@@ -1,7 +1,9 @@
+{-# LANGUAGE NamedFieldPuns #-}
+
 import Control.Applicative (optional, (<|>))
 import Control.Monad (when, (>=>))
 import Data.Functor (($>))
-import Data.List (find)
+import Data.List (find, tails)
 import System.Environment (getArgs)
 import Text.Parsec (char, digit, eof, many1, string)
 import Text.Parsec.Char (newline)
@@ -14,18 +16,29 @@ part1 = do
   input <- parseFromFile parser "input.txt" >>= either (error . show) return
   -- print input
   let states = scanl step initialState input
-  print $ sum $ atCycle states <$> [20, 60 .. 220]
+  print $ sum $ (\n -> strength n $ atCycle states n) <$> [20, 60 .. 220]
   return ()
 
-atCycle :: [State] -> Int -> Int
-atCycle states n = strength n <$> last $ takeWhile (\s -> cycle s < n) states
-  where
-    strength n (State x cycle) = x * n
+atCycle :: [State] -> Int -> State
+atCycle states n = last $ takeWhile (\s -> cycle s < n) states
+
+strength :: Int -> State -> Int
+strength n (State x cycle) = x * n
 
 part2 :: IO ()
 part2 = do
   input <- parseFromFile parser "input.txt" >>= either (error . show) return
+  let states = scanl step initialState input
+  print `traverse` aperture 40 ((\n -> overlaps n $ atCycle states n) <$> [1 .. 240])
+  -- print $ (\n -> let State {x} = atCycle states n in (n `mod` 40, [x, x + 1, x + 2])) <$> [161 .. 200]
   return ()
+
+overlaps :: Int -> State -> Char
+overlaps n State {x} = if n `mod` 40 `elem` ((`mod` 40) <$> [x, x + 1, x + 2]) then '#' else '.'
+
+aperture :: Int -> [a] -> [[a]]
+aperture n [] = []
+aperture n xs = take n xs : aperture n (drop n xs)
 
 data State = State {x :: Int, cycle :: Int} deriving (Show)
 
