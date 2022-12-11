@@ -19,19 +19,20 @@ import Prelude hiding (round)
 part1 :: IO ()
 part1 = do
   input <- parseFromFile parser "input.txt" >>= either (error . show) return
-  print $ heldItems <$> input
+  -- print $ heldItems <$> input
   -- print (($ 13) . operation <$> input)
-  print $ heldItems <$> turn input 0
-  print $ heldItems <$> round input
-  print $ monkeyBusiness $ iterate round input !! 20
+  -- print $ heldItems <$> turn (`div` 3) input 0
+  -- print $ heldItems <$> round (`div` 3) input
+  -- print $ inspected <$> iterate (round (`div` 3)) input !! 20
+  print $ monkeyBusiness $ iterate (round (`div` 3)) input !! 20
   return ()
 
-turn :: Map Int Monkey -> Int -> Map Int Monkey
-turn monkeys index = case monkeys ! index of
+turn :: (Int -> Int) -> Map Int Monkey -> Int -> Map Int Monkey
+turn worryManager monkeys index = case monkeys ! index of
   Monkey {heldItems = []} -> monkeys
-  monkey@(Monkey operation (Test condition ifTrue ifFalse) (item : rest) inspected) -> turn monkeys' index
+  monkey@(Monkey operation (Test condition ifTrue ifFalse) (item : rest) inspected) -> turn worryManager monkeys' index
     where
-      worryLevel = operation item `div` 3
+      worryLevel = worryManager $ operation item
       conditionResult = worryLevel `mod` condition == 0
       monkeyToThrow = if conditionResult then ifTrue else ifFalse
       monkey' = monkey {heldItems = rest, inspected = inspected + 1}
@@ -40,8 +41,8 @@ turn monkeys index = case monkeys ! index of
           & Map.adjust (\monkey@Monkey {heldItems} -> monkey {heldItems = heldItems ++ [worryLevel]}) monkeyToThrow
           & Map.insert index monkey'
 
-round :: Map Int Monkey -> Map Int Monkey
-round monkeys = foldl' turn monkeys (Map.keys monkeys)
+round :: (Int -> Int) -> Map Int Monkey -> Map Int Monkey
+round worryManager monkeys = foldl' (turn worryManager) monkeys (Map.keys monkeys)
 
 monkeyBusiness :: Map Int Monkey -> Int
 monkeyBusiness monkeys = product $ take 2 $ sortOn Down $ inspected <$> Map.elems monkeys
@@ -49,6 +50,9 @@ monkeyBusiness monkeys = product $ take 2 $ sortOn Down $ inspected <$> Map.elem
 part2 :: IO ()
 part2 = do
   input <- parseFromFile parser "input.txt" >>= either (error . show) return
+  let modBy = product $ condition . test <$> Map.elems input
+  -- print $ inspected <$> iterate (round (`mod` modBy)) input !! 1000
+  print $ monkeyBusiness $ iterate (round (`mod` modBy)) input !! 10000
   return ()
 
 data Test = Test {condition :: Int, ifTrue :: Int, ifFalse :: Int} deriving (Show)
@@ -86,8 +90,8 @@ decimal = read <$> many1 digit
 
 op :: Parser (Int -> Int)
 op = do
-  f <- (string "* " $> (*)) <|> (string "+ " $> (+))
-  f <$> decimal <|> (string "old" $> (\a -> a `f` a))
+  f <- string "* " $> (*) <|> string "+ " $> (+)
+  f <$> decimal <|> string "old" $> (\a -> a `f` a)
 
 main :: IO ()
 main = do
