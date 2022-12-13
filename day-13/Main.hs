@@ -1,54 +1,58 @@
 import Control.Applicative ((<|>))
 import Control.Monad (when)
+import Data.List (elemIndex, elemIndices, findIndices, sort)
 import System.Environment (getArgs)
-import Text.Parsec (digit, many1, newline, sepEndBy)
+import Text.Parsec (between, digit, many1, newline, sepEndBy)
 import Text.Parsec.Char (char)
 import Text.Parsec.Combinator (eof)
 import Text.Parsec.String (Parser, parseFromFile)
 
+makePairs :: [a] -> [(a, a)]
+makePairs [] = []
+makePairs xs = (a, b) : makePairs (drop 2 xs) where [a, b] = take 2 xs
+
 part1 :: IO ()
 part1 = do
-  input <- parseFromFile parser "input.txt" >>= either (error . show) return
+  input' <- parseFromFile parser "input.txt" >>= either (error . show) return
+  let input = makePairs input'
   -- print `traverse` input
-  print $ uncurry compare <$> input
-  print $ sum $ fst <$> filter ((== LT) . snd) (zip [1 ..] $ uncurry compare <$> input)
+  -- print $ uncurry compare <$> input
+  print $ sum $ (+ 1) <$> elemIndices LT (uncurry compare <$> input)
   return ()
+
+dividers :: [Packet]
+dividers =
+  [ ListPacket [ListPacket [IntPacket 2]],
+    ListPacket [ListPacket [IntPacket 6]]
+  ]
 
 part2 :: IO ()
 part2 = do
   input <- parseFromFile parser "input.txt" >>= either (error . show) return
+  -- print `traverse` sort (input ++ dividers)
+  let sorted = sort (input ++ dividers)
+  print $ product $ (+ 1) <$> findIndices (`elem` dividers) sorted
   return ()
 
-data Packet = IntPacket Int | ListPacket [Packet] deriving (Show)
-
-instance Eq Packet where
-  IntPacket left == IntPacket right = left == right
-  left@(IntPacket _) == right@(ListPacket _) = ListPacket [left] == right
-  left@(ListPacket _) == right@(IntPacket _) = left == ListPacket [right]
-  ListPacket [] == ListPacket [] = True
-  ListPacket [] == ListPacket _ = False
-  ListPacket _ == ListPacket [] = False
-  ListPacket (l : ls) == ListPacket (r : rs) = l == r && ListPacket ls == ListPacket rs
+data Packet = IntPacket Int | ListPacket [Packet] deriving (Show, Eq)
 
 instance Ord Packet where
-  IntPacket left <= IntPacket right = left <= right
-  left@(IntPacket _) <= right@(ListPacket _) = ListPacket [left] <= right
-  left@(ListPacket _) <= right@(IntPacket _) = left <= ListPacket [right]
-  ListPacket [] <= ListPacket _ = True
-  ListPacket _ <= ListPacket [] = False
-  ListPacket (l : ls) <= ListPacket (r : rs) = l < r || l == r && (ListPacket ls <= ListPacket rs)
+  IntPacket left `compare` IntPacket right = left `compare` right
+  left@(IntPacket _) `compare` right@(ListPacket _) = ListPacket [left] `compare` right
+  left@(ListPacket _) `compare` right@(IntPacket _) = left `compare` ListPacket [right]
+  ListPacket [] `compare` ListPacket [] = EQ
+  ListPacket [] `compare` ListPacket _ = LT
+  ListPacket _ `compare` ListPacket [] = GT
+  ListPacket (l : ls) `compare` ListPacket (r : rs) = if l == r then ListPacket ls `compare` ListPacket rs else l `compare` r
 
-parser :: Parser [(Packet, Packet)]
-parser = pair `sepEndBy` newline <* eof
-
-pair :: Parser (Packet, Packet)
-pair = (,) <$> packet <* newline <*> packet <* newline
+parser :: Parser [Packet]
+parser = packet `sepEndBy` many1 newline <* eof
 
 packet :: Parser Packet
 packet = listPacket <|> intPacket
 
 listPacket :: Parser Packet
-listPacket = ListPacket <$> (char '[' *> packet `sepEndBy` char ',' <* char ']')
+listPacket = ListPacket <$> between (char '[') (char ']') (packet `sepEndBy` char ',')
 
 intPacket :: Parser Packet
 intPacket = IntPacket <$> int
