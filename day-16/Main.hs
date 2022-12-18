@@ -8,7 +8,7 @@ import qualified Data.List as List
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Map.Strict ((!), (!?))
-import Data.Maybe (mapMaybe)
+import Data.Maybe (catMaybes)
 import Data.Ord (comparing)
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -22,29 +22,46 @@ part1 :: IO ()
 part1 = do
   input <- parseFromFile parser "input.txt" >>= either (error . show) return
   -- print input
-  -- print $ aStar input "AA" "QL"
-  print $ maximumBy (comparing pressure) $ step $ State input "AA" Set.empty 0 30
+  print $ score input (nonZeroValves input) 30
   return ()
 
-step :: State -> [State]
-step state@State {volcano, current, open, pressure, remainingTime}
-  | remainingTime <= 0 = [state]
-  | nonZeroValves == open = processTime state remainingTime
-  | Set.notMember current open && nonZero valve = processTime state {open = Set.insert current open} 1
-  | otherwise = concatMap (\path -> processTime state {current = head path} (length path)) (filter ((< remainingTime) . length) paths)
+score :: Volcano -> Set ValveId -> Int -> Pressure
+score volcano toVisit remainingTime = pressure $ maximumBy (comparing pressure) stepper
   where
-    valve = volcano ! current
-    nonZero = (> 0) . flowRate
-    nonZeroValves = Map.keysSet (Map.filter nonZero volcano)
-    current' = current
-    open' = Set.insert current open
-    paths = mapMaybe (aStar volcano current) (Set.toList (nonZeroValves `Set.difference` open))
-    processTime state time =
-      step
-        state
-          { pressure = pressure + time * sum (flowRate <$> Map.elems (Map.restrictKeys volcano open)),
-            remainingTime = remainingTime - time
-          }
+    paths = generatePaths volcano
+    stepper = step volcano paths toVisit $ State "AA" Set.empty 0 remainingTime
+
+nonZeroValves :: Volcano -> Set ValveId
+nonZeroValves volcano = Map.keysSet (Map.filter nonZero volcano) where nonZero = (> 0) . flowRate
+
+generatePaths :: Volcano -> Map (ValveId, ValveId) [ValveId]
+generatePaths volcano =
+  Map.fromList $
+    catMaybes
+      [ ((from, to),) <$> path
+        | let valves = Set.toList $ nonZeroValves volcano,
+          from <- "AA" : valves,
+          to <- valves,
+          from /= to,
+          let path = aStar volcano from to
+      ]
+
+step :: Volcano -> Map (ValveId, ValveId) [ValveId] -> Set ValveId -> State -> [State]
+step volcano paths valvesToVisit state = go state
+  where
+    go state@State {current, open, pressure, remainingTime}
+      | remainingTime <= 0 = return state
+      | Set.notMember current open && Set.member current valvesToVisit = processTime state {open = Set.insert current open} 1
+      | null currentPaths = processTime state remainingTime
+      | otherwise = concatMap (\path -> processTime state {current = head path} (length path)) currentPaths
+      where
+        currentPaths = filter ((<= remainingTime) . length) $ Map.elems $ Map.restrictKeys paths (Set.fromList $ (current,) <$> Set.toList (valvesToVisit `Set.difference` open))
+        processTime state time =
+          go
+            state
+              { pressure = pressure + time * sum (flowRate <$> Map.elems (Map.restrictKeys volcano open)),
+                remainingTime = remainingTime - time
+              }
 
 reconstructPath :: Map ValveId ValveId -> ValveId -> [ValveId]
 reconstructPath cameFrom current =
@@ -79,6 +96,12 @@ aStar graph from to = go openSet cameFrom gScore
 part2 :: IO ()
 part2 = do
   input <- parseFromFile parser "input.txt" >>= either (error . show) return
+  -- print input
+  let valves = nonZeroValves input
+  let (valve, valves') = Set.deleteFindMin valves
+  let powerset = Set.insert valve <$> Set.toList (Set.powerSet valves')
+  let valvesPairs = zip (Set.difference valves <$> powerset) powerset
+  print $ maximum $ (\(human, elephant) -> score input human 26 + score input elephant 26) <$> valvesPairs
   return ()
 
 type ValveId = String
@@ -90,8 +113,7 @@ type Pressure = Int
 type Volcano = Map ValveId Valve
 
 data State = State
-  { volcano :: Volcano,
-    current :: ValveId,
+  { current :: ValveId,
     open :: Set ValveId,
     pressure :: Pressure,
     remainingTime :: Int
