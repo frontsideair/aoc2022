@@ -12,9 +12,7 @@ import Text.ParserCombinators.Parsec.Number (int)
 countTrueGroups :: [Bool] -> Int
 countTrueGroups xs = length $ filter id $ head <$> group xs
 
-part1 :: IO ()
-part1 = do
-  input <- parseFromFile parser "input.txt" >>= either (error . show) return
+solve input = do
   -- print input
   let xs = Set.map (\(x, y, z) -> x) input
   let ys = Set.map (\(x, y, z) -> y) input
@@ -30,13 +28,44 @@ part1 = do
   let xsCount = (2 *) $ sum $ countTrueGroups . fmap (`Set.member` input) <$> xs'
   let yxCount = (2 *) $ sum $ countTrueGroups . fmap (`Set.member` input) <$> ys'
   let zsCount = (2 *) $ sum $ countTrueGroups . fmap (`Set.member` input) <$> zs'
-  print $ xsCount + yxCount + zsCount
+  return $ xsCount + yxCount + zsCount
+
+part1 :: IO ()
+part1 = do
+  input <- parseFromFile parser "input.txt" >>= either (error . show) return
+  solve input >>= print
   return ()
 
 part2 :: IO ()
 part2 = do
   input <- parseFromFile parser "input.txt" >>= either (error . show) return
+  let xs = Set.map (\(x, y, z) -> x) input
+  let ys = Set.map (\(x, y, z) -> y) input
+  let zs = Set.map (\(x, y, z) -> z) input
+  -- print (xs, ys, zs)
+  let withinBounds (x, y, z) = within (minimum xs, maximum xs) x && within (minimum ys, maximum ys) y && within (minimum zs, maximum zs) z
+  let space = Set.fromList [(x, y, z) | x <- [minimum xs .. maximum xs], y <- [minimum ys .. maximum ys], z <- [minimum zs .. maximum zs]]
+  -- print $ neighbors withinBounds (1, 1, 1)
+  let emptySpace = walkSpace (\cube -> withinBounds cube && Set.notMember cube input) Set.empty (Set.singleton (minimum xs, minimum ys, minimum zs))
+  let fullSpace = space `Set.difference` emptySpace
+  -- print $ Set.size fullSpace
+  -- print $ Set.size input
+  solve fullSpace >>= print
   return ()
+
+walkSpace :: (Cube -> Bool) -> Set Cube -> Set Cube -> Set Cube
+walkSpace withinBounds acc toVisit = case Set.minView toVisit of
+  Nothing -> acc
+  Just (x, xs) -> walkSpace withinBounds acc' (Set.difference (Set.fromList (neighbors withinBounds x) `Set.union` xs) acc')
+    where
+      acc' = Set.insert x acc
+
+within :: (Int, Int) -> Int -> Bool
+within (min, max) x = x >= min && x <= max
+
+-- only up, down, left, right, front, back; no diagonals
+neighbors :: (Cube -> Bool) -> Cube -> [Cube]
+neighbors withinBounds (x, y, z) = [(x + dx, y + dy, z + dz) | dx <- [-1 .. 1], dy <- [-1 .. 1], dz <- [-1 .. 1], (abs dx + abs dy + abs dz) == 1, withinBounds (x + dx, y + dy, z + dz)]
 
 type Cube = (Int, Int, Int)
 
