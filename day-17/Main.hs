@@ -1,6 +1,7 @@
 import Control.Applicative ((<|>))
 import Control.Monad (when)
-import Data.List (find)
+import Data.Functor.Identity (Identity)
+import Data.List (find, findIndex, unfoldr)
 import Data.Maybe (fromMaybe)
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -77,11 +78,11 @@ step :: State -> State
 step state@State {_settledShapes, _shapes = shape : nextShape : shapes} =
   if isValid state''
     then step state''
-    else state''' -- processCutoff state'''
+    else state'''
   where
     state' = push state
     state'' = fall state'
-    state''' = state' {_shapes = initializeShape state''' nextShape : shapes, _settledShapes = (head . _shapes) state' : _settledShapes}
+    state''' = state' {_shapes = initializeShape state''' nextShape : shapes, _settledShapes = take 50 $ (head . _shapes) state' : _settledShapes}
 
 isDisjoint :: State -> Shape -> Bool
 isDisjoint State {_settledShapes} shape = all (Set.disjoint shape) _settledShapes
@@ -116,6 +117,38 @@ move Right (x, y) = (x + 1, y)
 withinBounds :: Coord -> Bool
 withinBounds (x, y) = x >= 0 && x < width && y >= 0
 
+findCycle' :: Eq a => [a] -> ([a], [a])
+findCycle' xxs = fCycle xxs xxs
+  where
+    fCycle (x : xs) (_ : y : ys)
+      | x == y = fStart xxs xs
+      | otherwise = fCycle xs ys
+    fCycle _ _ = (xxs, []) -- not cyclic
+    fStart (x : xs) (y : ys)
+      | x == y = ([], x : fLength x xs)
+      | otherwise = let (as, bs) = fStart xs ys in (x : as, bs)
+    fLength x (y : ys)
+      | x == y = []
+      | otherwise = y : fLength x ys
+
+findCycle :: Eq a => [a] -> Maybe ([a], Int, Int)
+findCycle lst =
+  do
+    l <- findCycleLength lst
+    mu <- findIndex (uncurry (==)) $ zip lst (drop l lst)
+    let c = take l $ drop mu lst
+    return (c, l, mu)
+
+findCycleLength :: Eq a => [a] -> Maybe Int
+findCycleLength [] = Nothing
+findCycleLength (x : xs) =
+  let loop _ _ _ [] = Nothing
+      loop pow lam x (y : ys)
+        | x == y = Just lam
+        | pow == lam = loop (2 * pow) 1 y ys
+        | otherwise = loop pow (1 + lam) x ys
+   in loop 1 1 x xs
+
 part2 :: IO ()
 part2 = do
   input <- parseFromFile parser "input.txt" >>= either (error . show) return
@@ -124,31 +157,21 @@ part2 = do
   let state = State [] jets (initializeShape state (head shapes) : tail (cycle shapes))
   -- print $ head $ _shapes state
   let target = 1000000000000
-  let stepsToStabilize = lcm (length input) (length shapes)
-  print stepsToStabilize
+  let stepsToStabilize = 320 -- magic number
+  -- print stepsToStabilize
   let cycles = target `div` stepsToStabilize
   -- print cycles
   let steps = iterate step state
   let nths = (\index -> topY (steps !! (stepsToStabilize * index)) + 1) <$> [1 ..]
+  -- let nths = (+ 1) . topY <$> iterate step state
   -- print $ take 20 nths
   let diffs = zipWith (-) (tail nths) nths
-  print $ take 20 diffs
-  let n = 7
-  let (d, m) = cycles `quotRem` n
-  print (d, m)
-  print $ (sum (take n diffs) * d) + sum (take m diffs)
-
-  -- let first = topY (steps !! stepsToStabilize) + 1
-  -- let second = topY (steps !! (stepsToStabilize * 2)) + 1
-  -- let third = topY (steps !! (stepsToStabilize * 3)) + 1
-  -- let fourth = topY (steps !! (stepsToStabilize * 4)) + 1
-  -- let fifth = topY (steps !! (stepsToStabilize * 5)) + 1
-  -- let diff = second - first
-  -- print (first, second - first, third - second, fourth - third, fifth - fourth)
-  -- print (first, diff, cycles)
-  -- print $ first + (diff * (cycles - 1))
-  -- print $ first * cycles
-  return ()
+  -- print $ take 1000 diffs
+  let (xs, ys) = findCycle' diffs
+  -- let (xs, ys) :: ([Int], [Int]) = ([37, 29, 38, 33, 32], [31, 30, 34, 35, 35, 35, 31, 40, 27, 31, 28, 27, 36, 29, 34, 32, 30, 34, 28, 36, 32, 27, 31, 36, 25, 27, 33, 32, 34, 32, 35, 36, 30, 26, 35, 38, 30, 30, 33, 39, 34, 29, 34, 24, 37, 28, 30, 28, 25, 32, 36, 29, 29, 27, 36, 28, 34, 23, 30, 33, 31, 31, 23, 27, 32, 30, 33, 30, 31, 37, 27, 31, 39, 26, 34, 43, 32, 34, 36, 30, 33, 35, 35, 36, 28, 33, 32]) -- debug
+  -- print (xs, ys)
+  let (q, r) = (cycles - 1 - length xs) `quotRem` length ys
+  print (head nths + sum xs + sum ys * q + sum (take r ys))
 
 data Direction = Left | Right deriving (Show, Eq)
 
