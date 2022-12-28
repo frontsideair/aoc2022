@@ -12,3 +12,4 @@ executable solution
         ScopedTypeVariables
         NamedFieldPuns
         TupleSections
+        RecordWildCards
