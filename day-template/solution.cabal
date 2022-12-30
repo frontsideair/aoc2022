@@ -4,7 +4,7 @@ version:            0.0.1.0
 
 executable solution
     main-is:          Main.hs
-    build-depends:    base, parsec, text, matrix, containers, heaps
+    build-depends:    base, parsec, text, matrix, containers, heaps, parsec-numbers
     hs-source-dirs:   .
     default-language: Haskell2010
     default-extensions:
@@ -12,3 +12,4 @@ executable solution
         ScopedTypeVariables
         NamedFieldPuns
         TupleSections
+        RecordWildCards
